@@ -10,9 +10,12 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from app.engine.core.engine import AIEngine
+from app.engine.dispatcher import AgentDispatcher
+from app.engine.parser import ResponseParser
 from app.engine.prompts import PromptManager
 from app.engine.providers.base import BaseProvider
 from app.engine.providers.provider_factory import ProviderFactory
+from app.engine.registry import AgentRegistry
 from app.services.planning_service import PlanningService
 
 
@@ -47,6 +50,9 @@ class ApplicationContext:
         self._provider: BaseProvider | None = None
         self._ai_engine: AIEngine | None = None
         self._planning_service: PlanningService | None = None
+        self.__response_parser: ResponseParser | None = None
+        self.__agent_registry: AgentRegistry | None = None
+        self.__agent_dispatcher: AgentDispatcher | None = None
 
         logger.info(
             "application_context_ready",
@@ -62,6 +68,13 @@ class ApplicationContext:
         """
         if self._prompt_manager is None:
             self._prompt_manager = PromptManager()
+            logger.info(
+                "application_context_dependency_created",
+                extra={
+                    "event": "application_context_dependency_created",
+                    "dependency": "prompt_manager",
+                },
+            )
         return self._prompt_manager
 
     @property
@@ -77,6 +90,13 @@ class ApplicationContext:
         if self._provider is None:
             try:
                 self._provider = ProviderFactory.create(DEFAULT_PROVIDER)
+                logger.info(
+                    "application_context_dependency_created",
+                    extra={
+                        "event": "application_context_dependency_created",
+                        "dependency": "provider",
+                    },
+                )
             except Exception as exc:
                 logger.exception(
                     "application_context_failed",
@@ -103,6 +123,13 @@ class ApplicationContext:
         if self._ai_engine is None:
             try:
                 self._ai_engine = AIEngine(provider=self.provider)
+                logger.info(
+                    "application_context_dependency_created",
+                    extra={
+                        "event": "application_context_dependency_created",
+                        "dependency": "ai_engine",
+                    },
+                )
             except Exception as exc:
                 logger.exception(
                     "application_context_failed",
@@ -131,6 +158,13 @@ class ApplicationContext:
                     prompt_manager=self.prompt_manager,
                     ai_engine=self.ai_engine,
                 )
+                logger.info(
+                    "application_context_dependency_created",
+                    extra={
+                        "event": "application_context_dependency_created",
+                        "dependency": "planning_service",
+                    },
+                )
             except Exception as exc:
                 logger.exception(
                     "application_context_failed",
@@ -142,3 +176,90 @@ class ApplicationContext:
                 )
                 raise
         return self._planning_service
+
+    @property
+    def response_parser(self) -> ResponseParser:
+        """Return the shared response parser instance.
+
+        Returns:
+            The lazily initialized ``ResponseParser``.
+        """
+        if self.__response_parser is None:
+            self.__response_parser = ResponseParser()
+            logger.info(
+                "application_context_dependency_created",
+                extra={
+                    "event": "application_context_dependency_created",
+                    "dependency": "response_parser",
+                },
+            )
+        return self.__response_parser
+
+    @property
+    def agent_registry(self) -> AgentRegistry:
+        """Return the shared agent registry instance.
+
+        Returns:
+            The lazily initialized ``AgentRegistry``.
+
+        Raises:
+            Exception: Re-raises registry construction failures.
+        """
+        if self.__agent_registry is None:
+            try:
+                self.__agent_registry = AgentRegistry(
+                    planning_service=self.planning_service,
+                    response_parser=self.response_parser,
+                )
+                logger.info(
+                    "application_context_dependency_created",
+                    extra={
+                        "event": "application_context_dependency_created",
+                        "dependency": "agent_registry",
+                    },
+                )
+            except Exception as exc:
+                logger.exception(
+                    "application_context_failed",
+                    extra={
+                        "event": "application_context_failed",
+                        "dependency": "agent_registry",
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                raise
+        return self.__agent_registry
+
+    @property
+    def agent_dispatcher(self) -> AgentDispatcher:
+        """Return the shared agent dispatcher instance.
+
+        Returns:
+            The lazily initialized ``AgentDispatcher``.
+
+        Raises:
+            Exception: Re-raises dispatcher construction failures.
+        """
+        if self.__agent_dispatcher is None:
+            try:
+                self.__agent_dispatcher = AgentDispatcher(
+                    agents=self.agent_registry.all(),
+                )
+                logger.info(
+                    "application_context_dependency_created",
+                    extra={
+                        "event": "application_context_dependency_created",
+                        "dependency": "agent_dispatcher",
+                    },
+                )
+            except Exception as exc:
+                logger.exception(
+                    "application_context_failed",
+                    extra={
+                        "event": "application_context_failed",
+                        "dependency": "agent_dispatcher",
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                raise
+        return self.__agent_dispatcher
