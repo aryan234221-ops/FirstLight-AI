@@ -7,7 +7,12 @@ registered planning agents.
 import logging
 
 from app.engine.agents.architect_agent import ArchitectAgent
+from app.engine.agents.backend_agent import BackendAgent
 from app.engine.agents.ceo_agent import CEOAgent
+from app.engine.agents.database_agent import DatabaseAgent
+from app.engine.agents.devops_agent import DevOpsAgent
+from app.engine.agents.frontend_agent import FrontendAgent
+from app.engine.agents.qa_agent import QAAgent
 from app.engine.core.base_agent import BaseAgent
 from app.engine.parser import ResponseParser
 from app.services.planning_service import PlanningService
@@ -36,6 +41,26 @@ class AgentRegistry:
                 response_parser=response_parser,
             ),
             ArchitectAgent.ROLE_NAME: ArchitectAgent(
+                planning_service=planning_service,
+                response_parser=response_parser,
+            ),
+            BackendAgent.ROLE_NAME: BackendAgent(
+                planning_service=planning_service,
+                response_parser=response_parser,
+            ),
+            FrontendAgent.ROLE_NAME: FrontendAgent(
+                planning_service=planning_service,
+                response_parser=response_parser,
+            ),
+            DatabaseAgent.ROLE_NAME: DatabaseAgent(
+                planning_service=planning_service,
+                response_parser=response_parser,
+            ),
+            QAAgent.ROLE_NAME: QAAgent(
+                planning_service=planning_service,
+                response_parser=response_parser,
+            ),
+            DevOpsAgent.ROLE_NAME: DevOpsAgent(
                 planning_service=planning_service,
                 response_parser=response_parser,
             ),
