@@ -12,11 +12,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[3]
+_DEFAULT_SYSTEM_PROMPTS_DIR: Path = PROJECT_ROOT / "backend" / "prompts" / "system"
+_CONFIGURED_SYSTEM_PROMPTS_DIR = os.getenv("FIRSTLIGHT_SYSTEM_PROMPTS_DIR")
+
 # Central prompt directory for system prompts.
 # This can be replaced by the project's centralized configuration layer later.
-SYSTEM_PROMPTS_DIR: Path = Path(
-    os.getenv("FIRSTLIGHT_SYSTEM_PROMPTS_DIR", "backend/prompts/system")
+SYSTEM_PROMPTS_DIR: Path = (
+    Path(_CONFIGURED_SYSTEM_PROMPTS_DIR).expanduser()
+    if _CONFIGURED_SYSTEM_PROMPTS_DIR
+    else _DEFAULT_SYSTEM_PROMPTS_DIR
 )
+if not SYSTEM_PROMPTS_DIR.is_absolute():
+    SYSTEM_PROMPTS_DIR = (PROJECT_ROOT / SYSTEM_PROMPTS_DIR).resolve()
 
 
 class PromptManager:
