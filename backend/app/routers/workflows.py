@@ -11,30 +11,30 @@ from app.services.planning_service import reset_current_project_id, set_current_
 logger = logging.getLogger(__name__)
 
 
-class AgentPlanRequest(BaseModel):
-    """Request payload for agent plan generation."""
+class WorkflowRequest(BaseModel):
+    """Request payload for workflow execution."""
 
     goal: str
     project_id: str | None = None
 
+
 router = APIRouter(
-    prefix="/api/v1/agents",
-    tags=["Agents"]
+    prefix="/api/v1/workflows",
+    tags=["Workflows"],
 )
 
 context = ApplicationContext()
-dispatcher = context.agent_dispatcher
+workflow = context.workflow_orchestrator
 
 
-@router.post("/{agent_name}/plan", response_model=Plan)
-def create_plan(agent_name: str, request: AgentPlanRequest) -> Plan:
-    """Generate a plan by dispatching to the requested agent."""
+@router.post("/plan", response_model=dict[str, Plan])
+def create_workflow_plan(request: WorkflowRequest) -> dict[str, Plan]:
+    """Execute the default planning workflow."""
     request_id = None
     logger.info(
-        "agent_request_started",
+        "workflow_request_started",
         extra={
-            "event": "agent_request_started",
-            "agent_name": agent_name,
+            "event": "workflow_request_started",
             "request_id": request_id,
         },
     )
@@ -42,16 +42,12 @@ def create_plan(agent_name: str, request: AgentPlanRequest) -> Plan:
     project_token = set_current_project_id(request.project_id)
 
     try:
-        plan = dispatcher.dispatch(
-            agent_name=agent_name,
-            goal=request.goal,
-        )
+        result = workflow.execute(request.goal)
     except ValueError as exc:
         logger.error(
-            "agent_request_failed",
+            "workflow_request_failed",
             extra={
-                "event": "agent_request_failed",
-                "agent_name": agent_name,
+                "event": "workflow_request_failed",
                 "request_id": request_id,
                 "error_type": type(exc).__name__,
             },
@@ -62,10 +58,9 @@ def create_plan(agent_name: str, request: AgentPlanRequest) -> Plan:
         ) from exc
     except Exception as exc:
         logger.error(
-            "agent_request_failed",
+            "workflow_request_failed",
             extra={
-                "event": "agent_request_failed",
-                "agent_name": agent_name,
+                "event": "workflow_request_failed",
                 "request_id": request_id,
                 "error_type": type(exc).__name__,
             },
@@ -78,11 +73,10 @@ def create_plan(agent_name: str, request: AgentPlanRequest) -> Plan:
         reset_current_project_id(project_token)
 
     logger.info(
-        "agent_request_completed",
+        "workflow_request_completed",
         extra={
-            "event": "agent_request_completed",
-            "agent_name": agent_name,
+            "event": "workflow_request_completed",
             "request_id": request_id,
         },
     )
-    return plan
+    return result

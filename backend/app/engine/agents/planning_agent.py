@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from app.engine.core.base_agent import BaseAgent
 from app.engine.core.task import Plan
 from app.engine.parser import ResponseParser
-from app.services.planning_service import PlanningService
+from app.services.planning_service import PlanningService, get_current_project_id
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,7 @@ class PlanningAgent(BaseAgent, ABC):
             response = self.planning_service.generate_plan(
                 agent_name=self.agent_name,
                 goal=normalized_goal,
+                project_id=get_current_project_id(),
             )
             plan = self.response_parser.parse_plan(response)
             self.after_plan(plan)

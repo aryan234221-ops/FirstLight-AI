@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from app.routers import agents
+from app.routers import workflows
+from app.routers import knowledge
 
 app = FastAPI(
     title="FirstLight AI Studio",
@@ -7,6 +9,8 @@ app = FastAPI(
 )
 
 app.include_router(agents.router)
+app.include_router(workflows.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/")
