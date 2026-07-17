@@ -42,7 +42,11 @@ def create_workflow_plan(request: WorkflowRequest) -> dict[str, Plan]:
     project_token = set_current_project_id(request.project_id)
 
     try:
-        result = workflow.execute(request.goal)
+        context_result = workflow.execute(
+            goal=request.goal,
+            project_id=request.project_id,
+        )
+        result = context_result.completed_agent_plans
     except ValueError as exc:
         logger.error(
             "workflow_request_failed",
