@@ -6,9 +6,13 @@ exposing shared dependencies through lazy initialization.
 
 import logging
 from pathlib import Path
+from sqlalchemy.orm import Session
 
 from dotenv import load_dotenv
 
+from app.auth.service import AuthService
+from app.core.config import PlatformConfig, load_config
+from app.db.database import SessionLocal, init_db
 from app.engine.core.engine import AIEngine
 from app.engine.dispatcher import AgentDispatcher
 from app.engine.parser import ResponseParser
@@ -24,6 +28,8 @@ from app.rag.providers.in_memory_vector_store import InMemoryVectorStore
 from app.rag.retrieval_service import RetrievalService
 from app.services.knowledge_service import KnowledgeService
 from app.services.planning_service import PlanningService
+from app.repositories.sql_repositories import AuthRepository, KnowledgeRepository
+from app.workflows.workflow_planner import WorkflowPlanner
 from app.workflows.workflow_orchestrator import WorkflowOrchestrator
 
 
@@ -54,6 +60,9 @@ class ApplicationContext:
             extra={"event": "application_context_initializing"},
         )
 
+        init_db()
+
+        self._config: PlatformConfig = load_config()
         self._prompt_manager: PromptManager | None = None
         self._provider: BaseProvider | None = None
         self._ai_engine: AIEngine | None = None
@@ -64,7 +73,9 @@ class ApplicationContext:
         self._prompt_augmentation_service: PromptAugmentationService | None = None
         self._knowledge_indexing_service: KnowledgeIndexingService | None = None
         self._knowledge_service: KnowledgeService | None = None
+        self._workflow_planner: WorkflowPlanner | None = None
         self._planning_service: PlanningService | None = None
+        self._auth_service: AuthService | None = None
         self.__response_parser: ResponseParser | None = None
         self.__agent_registry: AgentRegistry | None = None
         self.__agent_dispatcher: AgentDispatcher | None = None
@@ -269,6 +280,20 @@ class ApplicationContext:
         return self._knowledge_service
 
     @property
+    def workflow_planner(self) -> WorkflowPlanner:
+        """Return the shared workflow planner instance."""
+        if self._workflow_planner is None:
+            self._workflow_planner = WorkflowPlanner()
+            logger.info(
+                "application_context_dependency_created",
+                extra={
+                    "event": "application_context_dependency_created",
+                    "dependency": "workflow_planner",
+                },
+            )
+        return self._workflow_planner
+
+    @property
     def planning_service(self) -> PlanningService:
         """Return the shared planning service instance.
 
@@ -411,6 +436,7 @@ class ApplicationContext:
             try:
                 self._workflow_orchestrator = WorkflowOrchestrator(
                     dispatcher=self.agent_dispatcher,
+                    planner=self.workflow_planner,
                 )
                 logger.info(
                     "application_context_dependency_created",
@@ -430,3 +456,31 @@ class ApplicationContext:
                 )
                 raise
         return self._workflow_orchestrator
+
+    @property
+    def config(self) -> PlatformConfig:
+        return self._config
+
+    @property
+    def session_factory(self):
+        return SessionLocal
+
+    @property
+    def auth_service(self) -> AuthService:
+        """Return singleton auth service backed by a scoped session."""
+        if self._auth_service is None:
+            session = SessionLocal()
+            repository = AuthRepository(session)
+            self._auth_service = AuthService(repository=repository, config=self.config)
+            self._auth_service.bootstrap_defaults()
+            session.close()
+        return self._auth_service
+
+    def auth_service_for_session(self, db: Session) -> AuthService:
+        """Build an auth service bound to the provided session."""
+        service = AuthService(repository=AuthRepository(db), config=self.config)
+        service.bootstrap_defaults()
+        return service
+
+    def knowledge_repository_for_session(self, db: Session) -> KnowledgeRepository:
+        return KnowledgeRepository(db)

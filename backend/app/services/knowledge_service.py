@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 from typing import Protocol
 from uuid import uuid4
 
+from app.db.database import SessionLocal
+from app.db.models import KnowledgeDocumentModel
 from app.models.knowledge import KnowledgeDocument
 from app.rag.knowledge_indexing_service import KnowledgeIndexingService
 from app.schemas.knowledge import KnowledgeCreateRequest
@@ -47,6 +50,75 @@ class InMemoryKnowledgeRepository:
         return removed is not None
 
 
+class SqliteKnowledgeRepository:
+    """SQLite-backed implementation for durable knowledge metadata storage."""
+
+    def create(self, document: KnowledgeDocument) -> KnowledgeDocument:
+        db = SessionLocal()
+        try:
+            row = KnowledgeDocumentModel(
+                id=document.id,
+                project_id=document.project_id,
+                name=document.name,
+                description=document.description,
+                file_type=document.file_type,
+                file_size=document.file_size,
+                metadata_json=json.dumps({"source": "v1"}),
+                text_content="",
+                version=1,
+                status="indexed",
+                uploaded_at=document.uploaded_at,
+            )
+            db.add(row)
+            db.commit()
+            return document
+        finally:
+            db.close()
+
+    def list(self, project_id: str) -> list[KnowledgeDocument]:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(KnowledgeDocumentModel)
+                .filter(KnowledgeDocumentModel.project_id == project_id)
+                .order_by(KnowledgeDocumentModel.uploaded_at.desc())
+                .all()
+            )
+            return [
+                KnowledgeDocument(
+                    id=row.id,
+                    project_id=row.project_id,
+                    name=row.name,
+                    description=row.description,
+                    file_type=row.file_type,
+                    file_size=row.file_size,
+                    uploaded_at=row.uploaded_at,
+                )
+                for row in rows
+            ]
+        finally:
+            db.close()
+
+    def delete(self, project_id: str, document_id: str) -> bool:
+        db = SessionLocal()
+        try:
+            row = (
+                db.query(KnowledgeDocumentModel)
+                .filter(
+                    KnowledgeDocumentModel.project_id == project_id,
+                    KnowledgeDocumentModel.id == document_id,
+                )
+                .first()
+            )
+            if row is None:
+                return False
+            db.delete(row)
+            db.commit()
+            return True
+        finally:
+            db.close()
+
+
 class KnowledgeService:
     """Orchestrates knowledge document metadata CRUD operations."""
 
@@ -55,7 +127,7 @@ class KnowledgeService:
         repository: KnowledgeRepository | None = None,
         indexing_service: KnowledgeIndexingService | None = None,
     ) -> None:
-        self._repository: KnowledgeRepository = repository or InMemoryKnowledgeRepository()
+        self._repository: KnowledgeRepository = repository or SqliteKnowledgeRepository()
         self._indexing_service: KnowledgeIndexingService | None = indexing_service
 
     def create(self, project_id: str, payload: KnowledgeCreateRequest) -> KnowledgeDocument:
