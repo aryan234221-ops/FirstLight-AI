@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { EnterprisePanel } from "@/components/EnterprisePanel";
 import { ExecutionDetailsPanel } from "@/components/ExecutionDetailsPanel";
 import { ExecutionHistoryPanel } from "@/components/ExecutionHistoryPanel";
 import { KnowledgeLibraryPanel } from "@/components/KnowledgeLibraryPanel";
@@ -12,6 +13,7 @@ import {
   EmployeeId,
   ExecutionMode,
   ExecutionRecord,
+  AuthSession,
   KnowledgeDocumentMetadata,
   KnowledgeUploadInput,
   Project,
@@ -24,6 +26,7 @@ const PROJECTS_STORAGE_KEY = "fl.projects";
 const EXECUTIONS_STORAGE_KEY = "fl.executions";
 const SELECTED_PROJECT_STORAGE_KEY = "fl.selectedProjectId";
 const KNOWLEDGE_STORAGE_KEY = "fl.knowledgeDocuments";
+const AUTH_STORAGE_KEY = "fl.authSession";
 
 type InitialWorkspaceState = {
   projects: Project[];
@@ -32,15 +35,29 @@ type InitialWorkspaceState = {
   selectedProjectId: string | null;
 };
 
-type WorkspaceTab = "workspace" | "knowledge";
+type WorkspaceTab = "workspace" | "knowledge" | "enterprise";
+const DEFAULT_PROJECT_ID = "firstlight-core";
+const DEFAULT_PROJECT_CREATED_AT = "2026-01-01T00:00:00.000Z";
+
+function parseStoredArray<T>(raw: string | null): T[] {
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function createDefaultProject(): Project {
-  const now = new Date().toISOString();
   return {
-    id: crypto.randomUUID(),
+    id: DEFAULT_PROJECT_ID,
     name: "FirstLight Core",
     description: "Primary AI workforce initiative",
-    createdDate: now,
+    createdDate: DEFAULT_PROJECT_CREATED_AT,
     lastRun: null,
     workflowType: "workflow",
     preferredProvider: "Gemini 3.5 Flash",
@@ -50,22 +67,28 @@ function createDefaultProject(): Project {
 }
 
 function loadInitialWorkspaceState(): InitialWorkspaceState {
-  if (typeof window === "undefined") {
-    const fallback = createDefaultProject();
-    return { projects: [fallback], executions: [], selectedProjectId: fallback.id };
-  }
+  const fallback = createDefaultProject();
+  return { projects: [fallback], executions: [], knowledgeDocuments: [], selectedProjectId: fallback.id };
+}
 
+function loadWorkspaceStateFromStorage(): InitialWorkspaceState {
+  const fallback = createDefaultProject();
   try {
     const storedProjects = localStorage.getItem(PROJECTS_STORAGE_KEY);
     const storedExecutions = localStorage.getItem(EXECUTIONS_STORAGE_KEY);
     const storedKnowledgeDocuments = localStorage.getItem(KNOWLEDGE_STORAGE_KEY);
     const storedSelectedProjectId = localStorage.getItem(SELECTED_PROJECT_STORAGE_KEY);
 
-    const projects = storedProjects ? (JSON.parse(storedProjects) as Project[]) : [createDefaultProject()];
-    const executions = storedExecutions ? (JSON.parse(storedExecutions) as ExecutionRecord[]) : [];
-    const knowledgeDocuments = storedKnowledgeDocuments
-      ? (JSON.parse(storedKnowledgeDocuments) as KnowledgeDocumentMetadata[])
-      : [];
+    const parsedProjects = parseStoredArray<Project>(storedProjects).filter(
+      (project) =>
+        typeof project?.id === "string" &&
+        typeof project?.name === "string" &&
+        typeof project?.description === "string" &&
+        typeof project?.createdDate === "string",
+    );
+    const projects = parsedProjects.length > 0 ? parsedProjects : [createDefaultProject()];
+    const executions = parseStoredArray<ExecutionRecord>(storedExecutions);
+    const knowledgeDocuments = parseStoredArray<KnowledgeDocumentMetadata>(storedKnowledgeDocuments);
     const selectedProjectId =
       storedSelectedProjectId && projects.some((project) => project.id === storedSelectedProjectId)
         ? storedSelectedProjectId
@@ -73,7 +96,6 @@ function loadInitialWorkspaceState(): InitialWorkspaceState {
 
     return { projects, executions, knowledgeDocuments, selectedProjectId };
   } catch {
-    const fallback = createDefaultProject();
     return { projects: [fallback], executions: [], knowledgeDocuments: [], selectedProjectId: fallback.id };
   }
 }
@@ -85,16 +107,31 @@ function buildKnowledgeUploadRequest(projectId: string, upload: KnowledgeUploadI
   };
 }
 
+function safePrompt(message: string, defaultValue = ""): string | null {
+  try {
+    return window.prompt(message, defaultValue);
+  } catch {
+    return defaultValue;
+  }
+}
+
+function safeConfirm(message: string): boolean {
+  try {
+    return window.confirm(message);
+  } catch {
+    return true;
+  }
+}
+
 export default function Home() {
-  const [projects, setProjects] = useState<Project[]>(() => loadInitialWorkspaceState().projects);
-  const [executions, setExecutions] = useState<ExecutionRecord[]>(() => loadInitialWorkspaceState().executions);
-  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentMetadata[]>(
-    () => loadInitialWorkspaceState().knowledgeDocuments,
-  );
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
-    () => loadInitialWorkspaceState().selectedProjectId,
-  );
+  const initialState = loadInitialWorkspaceState();
+  const [projects, setProjects] = useState<Project[]>(initialState.projects);
+  const [executions, setExecutions] = useState<ExecutionRecord[]>(initialState.executions);
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentMetadata[]>(initialState.knowledgeDocuments);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(initialState.selectedProjectId);
+  const [hasHydratedStorage, setHasHydratedStorage] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("workspace");
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
@@ -110,26 +147,72 @@ export default function Home() {
   }, [darkMode]);
 
   useEffect(() => {
+    const storedState = loadWorkspaceStateFromStorage();
+    const storedAuth = localStorage.getItem(AUTH_STORAGE_KEY);
+
+    const hydrateState = () => {
+      setProjects(storedState.projects);
+      setExecutions(storedState.executions);
+      setKnowledgeDocuments(storedState.knowledgeDocuments);
+      setSelectedProjectId(storedState.selectedProjectId);
+      if (storedAuth) {
+        try {
+          setAuthSession(JSON.parse(storedAuth) as AuthSession);
+        } catch {
+          setAuthSession(null);
+        }
+      }
+      setHasHydratedStorage(true);
+    };
+
+    const timeoutId = window.setTimeout(hydrateState, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedStorage) {
+      return;
+    }
     if (projects.length === 0) {
       return;
     }
     localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
-  }, [projects]);
+  }, [projects, hasHydratedStorage]);
 
   useEffect(() => {
+    if (!hasHydratedStorage) {
+      return;
+    }
     localStorage.setItem(EXECUTIONS_STORAGE_KEY, JSON.stringify(executions));
-  }, [executions]);
+  }, [executions, hasHydratedStorage]);
 
   useEffect(() => {
+    if (!hasHydratedStorage) {
+      return;
+    }
     localStorage.setItem(KNOWLEDGE_STORAGE_KEY, JSON.stringify(knowledgeDocuments));
-  }, [knowledgeDocuments]);
+  }, [knowledgeDocuments, hasHydratedStorage]);
 
   useEffect(() => {
+    if (!hasHydratedStorage) {
+      return;
+    }
     if (!selectedProjectId) {
       return;
     }
     localStorage.setItem(SELECTED_PROJECT_STORAGE_KEY, selectedProjectId);
-  }, [selectedProjectId]);
+  }, [selectedProjectId, hasHydratedStorage]);
+
+  useEffect(() => {
+    if (!hasHydratedStorage) {
+      return;
+    }
+    if (!authSession) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+  }, [authSession, hasHydratedStorage]);
 
   useEffect(() => {
     if (!loading || startedAt === null) {
@@ -177,12 +260,12 @@ export default function Home() {
   };
 
   const handleCreateProject = () => {
-    const name = window.prompt("Project name", "New Project")?.trim();
+    const name = safePrompt("Project name", "New Project")?.trim();
     if (!name) {
       return;
     }
 
-    const description = window.prompt("Project description", "")?.trim() ?? "";
+    const description = safePrompt("Project description", "")?.trim() ?? "";
     const newProject: Project = {
       id: crypto.randomUUID(),
       name,
@@ -205,7 +288,7 @@ export default function Home() {
       return;
     }
 
-    const nextName = window.prompt("Rename project", current.name)?.trim();
+    const nextName = safePrompt("Rename project", `${current.name} Renamed`)?.trim();
     if (!nextName) {
       return;
     }
@@ -221,7 +304,7 @@ export default function Home() {
       return;
     }
 
-    const confirmed = window.confirm(`Delete project "${current.name}"?`);
+    const confirmed = safeConfirm(`Delete project "${current.name}"?`);
     if (!confirmed) {
       return;
     }
@@ -364,6 +447,18 @@ export default function Home() {
     }
   };
 
+  if (!hasHydratedStorage) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-zinc-100">
+        <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-3 py-4 sm:px-4 lg:px-6">
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 text-sm text-zinc-400">
+            Loading workspace...
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-3 py-4 sm:px-4 lg:px-6">
@@ -409,6 +504,17 @@ export default function Home() {
                   type="button"
                 >
                   Knowledge
+                </button>
+                <button
+                  className={`rounded-md px-3 py-1 text-xs font-semibold transition ${
+                    activeTab === "enterprise"
+                      ? "bg-zinc-700 text-zinc-100"
+                      : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                  }`}
+                  onClick={() => setActiveTab("enterprise")}
+                  type="button"
+                >
+                  Enterprise
                 </button>
               </div>
             </div>
@@ -537,11 +643,20 @@ export default function Home() {
                       </section>
                     )}
                   </>
-                ) : (
+                ) : activeTab === "knowledge" ? (
                   <KnowledgeLibraryPanel
                     records={selectedProjectKnowledge}
                     onUpload={handleKnowledgeUpload}
                     onRemove={handleKnowledgeRemove}
+                  />
+                ) : (
+                  <EnterprisePanel
+                    backendBaseUrl={BACKEND_BASE_URL}
+                    projectId={selectedProject.id}
+                    projectName={selectedProject.name}
+                    projectGoal={selectedProject.goalDraft}
+                    auth={authSession}
+                    onAuthChange={setAuthSession}
                   />
                 )}
               </>

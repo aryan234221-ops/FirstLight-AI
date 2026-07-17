@@ -8,8 +8,8 @@ type KnowledgeLibraryPanelProps = {
   onRemove: (documentId: string) => void;
 };
 
-const ALLOWED_EXTENSIONS = ["pdf", "docx", "txt", "md", "json", "csv"];
-const ACCEPT_ATTRIBUTE = ".pdf,.docx,.txt,.md,.json,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,application/json,text/csv";
+const ALLOWED_EXTENSIONS = ["pdf", "docx", "txt", "md", "json", "csv", "png", "jpg", "jpeg", "webp"];
+const ACCEPT_ATTRIBUTE = ".pdf,.docx,.txt,.md,.json,.csv,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,application/json,text/csv,image/png,image/jpeg,image/webp";
 
 function formatBytes(size: number): string {
   if (size < 1024) {
@@ -137,7 +137,7 @@ export function KnowledgeLibraryPanel({ records, onUpload, onRemove }: Knowledge
         </article>
         <article className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
           <p className="text-xs uppercase tracking-wide text-zinc-500">Supported</p>
-          <p className="mt-2 text-sm font-semibold text-zinc-200">PDF DOCX TXT MD JSON CSV</p>
+          <p className="mt-2 text-sm font-semibold text-zinc-200">PDF DOCX TXT MD JSON CSV PNG JPG WEBP</p>
         </article>
       </div>
 

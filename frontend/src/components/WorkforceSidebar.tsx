@@ -18,7 +18,7 @@ export function WorkforceSidebar({
   onSelectEmployee,
 }: WorkforceSidebarProps) {
   return (
-    <aside className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 xl:w-[280px]">
+    <aside className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 xl:w-70">
       <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">AI Workforce</h2>
       <ul className="space-y-2">
         {employees.map((employee) => {

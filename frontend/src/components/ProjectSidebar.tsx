@@ -18,7 +18,7 @@ export function ProjectSidebar({
   onDeleteProject,
 }: ProjectSidebarProps) {
   return (
-    <aside className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 xl:w-[280px]">
+    <aside className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4 xl:w-70">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-400">Projects</h2>
         <button

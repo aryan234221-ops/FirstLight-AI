@@ -13,7 +13,7 @@ export function ExecutionHistoryPanel({ records }: ExecutionHistoryPanelProps) {
   return (
     <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 p-4">
       <h3 className="text-sm font-semibold text-zinc-200">Execution History</h3>
-      <div className="mt-3 max-h-[340px] space-y-3 overflow-auto pr-1">
+      <div className="mt-3 max-h-85 space-y-3 overflow-auto pr-1">
         {records.length === 0 ? (
           <p className="text-sm text-zinc-500">No executions yet for this project.</p>
         ) : (

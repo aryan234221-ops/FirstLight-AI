@@ -85,6 +85,57 @@ export type KnowledgeUploadInput = {
   metadata: Omit<KnowledgeDocumentMetadata, "projectId">;
 };
 
+export type AuthSession = {
+  accessToken: string;
+  refreshToken: string;
+  username: string;
+  roles: string[];
+};
+
+export type DashboardOverview = {
+  recent_projects: Array<{ id: string; name: string; description: string; updated_at: string }>;
+  running_workflows: number;
+  completed_workflows: number;
+  agent_utilization: Array<{ agent: string; runs: number }>;
+  knowledge_statistics: { document_count: number; project_count: number };
+  execution_success_rate: number;
+  recent_activity: Array<{ event_type: string; message: string; status: string; created_at: string; project_id: string | null }>;
+  system_health: { status: string; database: string };
+};
+
+export type WorkflowRunSummary = {
+  run_id: string;
+  project_id: string;
+  goal: string;
+  status: string;
+  approval_state: string;
+  current_agent: string | null;
+  estimated_ms: number;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number;
+  error_message: string | null;
+};
+
+export type WorkflowEvent = {
+  id: string;
+  event_type: string;
+  status: string;
+  message: string;
+  agent_name: string | null;
+  progress: number;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ChatMessage = {
+  id: string;
+  project_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
 export const WORKFORCE: Employee[] = [
   { id: "ceo", name: "CEO", icon: "🧠", status: "online" },
   { id: "architect", name: "Architect", icon: "🏗", status: "online" },
